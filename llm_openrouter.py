@@ -34,6 +34,24 @@ def has_parameter(model_definition, parameter):
 
 
 class ReasoningEffortEnum(str, Enum):
+    minimal = "minimal"
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class VerbosityEnum(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class SearchEngineEnum(str, Enum):
+    native = "native"
+    exa = "exa"
+
+
+class SearchContextSizeEnum(str, Enum):
     low = "low"
     medium = "medium"
     high = "high"
@@ -42,7 +60,27 @@ class ReasoningEffortEnum(str, Enum):
 class _mixin:
     class Options(Chat.Options):
         online: Optional[bool] = Field(
-            description="Use relevant search results from Exa",
+            description="Use relevant search results from Exa (deprecated, use plugins instead)",
+            default=None,
+        )
+        plugins: Optional[Union[dict, str]] = Field(
+            description='JSON object or string to configure plugins, e.g. {"id": "web", "engine": "exa", "max_results": 5}',
+            default=None,
+        )
+        web_search_engine: Optional[SearchEngineEnum] = Field(
+            description='Search engine for web plugin: "native" or "exa"',
+            default=None,
+        )
+        web_search_max_results: Optional[int] = Field(
+            description="Number of search results to return (default: 5)",
+            default=None,
+        )
+        web_search_prompt: Optional[str] = Field(
+            description="Custom prompt for integrating search results",
+            default=None,
+        )
+        web_search_context_size: Optional[SearchContextSizeEnum] = Field(
+            description='Search context size: "low", "medium", or "high"',
             default=None,
         )
         provider: Optional[Union[dict, str]] = Field(
@@ -50,7 +88,7 @@ class _mixin:
             default=None,
         )
         reasoning_effort: Optional[ReasoningEffortEnum] = Field(
-            description='One of "high", "medium", or "low" to control reasoning effort',
+            description='One of "high", "medium", "low" or "minimal" to control reasoning effort',
             default=None,
         )
         reasoning_max_tokens: Optional[int] = Field(
@@ -59,6 +97,10 @@ class _mixin:
         )
         reasoning_enabled: Optional[bool] = Field(
             description="Set to true to enable reasoning with default parameters",
+            default=None,
+        )
+        verbosity: Optional[VerbosityEnum] = Field(
+            description='One of "high", "medium", "low", "minimal" to control verbosity',
             default=None,
         )
 
@@ -74,18 +116,65 @@ class _mixin:
                     raise ValueError("Invalid JSON in provider string")
             return provider
 
+        @field_validator("plugins")
+        def validate_plugins(cls, plugins):
+            if plugins is None:
+                return None
+
+            if isinstance(plugins, str):
+                try:
+                    return json.loads(plugins)
+                except json.JSONDecodeError:
+                    raise ValueError("Invalid JSON in plugins string")
+            return plugins
+
     def build_kwargs(self, prompt, stream):
         kwargs = super().build_kwargs(prompt, stream)
+        # Remove custom options from kwargs (they go in extra_body)
         kwargs.pop("provider", None)
         kwargs.pop("online", None)
+        kwargs.pop("plugins", None)
+        kwargs.pop("web_search_engine", None)
+        kwargs.pop("web_search_max_results", None)
+        kwargs.pop("web_search_prompt", None)
+        kwargs.pop("web_search_context_size", None)
         kwargs.pop("reasoning_effort", None)
         kwargs.pop("reasoning_max_tokens", None)
         kwargs.pop("reasoning_enabled", None)
+        kwargs.pop("verbosity", None)
+
         extra_body = {}
-        if prompt.options.online:
-            extra_body["plugins"] = [{"id": "web"}]
+
+        # Handle web search plugins
+        if prompt.options.plugins:
+            # User provided explicit plugins config
+            extra_body["plugins"] = prompt.options.plugins if isinstance(prompt.options.plugins, list) else [prompt.options.plugins]
+        elif prompt.options.online or any([
+            prompt.options.web_search_engine,
+            prompt.options.web_search_max_results,
+            prompt.options.web_search_prompt,
+        ]):
+            # Build web plugin config from individual options
+            web_plugin = {"id": "web"}
+            if prompt.options.web_search_engine:
+                web_plugin["engine"] = prompt.options.web_search_engine
+            if prompt.options.web_search_max_results:
+                web_plugin["max_results"] = prompt.options.web_search_max_results
+            if prompt.options.web_search_prompt:
+                web_plugin["search_prompt"] = prompt.options.web_search_prompt
+            extra_body["plugins"] = [web_plugin]
+
+        # Handle web_search_options
+        if prompt.options.web_search_context_size:
+            extra_body["web_search_options"] = {
+                "search_context_size": prompt.options.web_search_context_size
+            }
+
+        # Handle provider routing
         if prompt.options.provider:
             extra_body["provider"] = prompt.options.provider
+
+        # Handle reasoning parameters
         reasoning = {}
         if prompt.options.reasoning_effort:
             reasoning["effort"] = prompt.options.reasoning_effort
@@ -95,6 +184,11 @@ class _mixin:
             reasoning["enabled"] = prompt.options.reasoning_enabled
         if reasoning:
             extra_body["reasoning"] = reasoning
+
+        # Handle verbosity
+        if prompt.options.verbosity is not None:
+            extra_body["verbosity"] = prompt.options.verbosity
+
         if extra_body:
             kwargs["extra_body"] = extra_body
         return kwargs
