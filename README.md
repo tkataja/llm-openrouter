@@ -147,7 +147,7 @@ Current time: 2025-09-20 16:35:53 PDT (2025-09-20 23:35:53 UTC)
 
 Some OpenRouter models such as [GPT-5](https://openrouter.ai/openai/gpt-5) support options for controlling reasoning:
 
-- `-o reasoning_effort low|medium|high` - control reasoning effort
+- `-o reasoning_effort none|minimal|low|medium|high|xhigh` - control reasoning effort
 - `-o reasoning_max_tokens 2048` - an alternative way of specifying effort for some models
 - `-o reasoning_enabled true` - use this to enable reasoning without setting an effort via one of the other two options
 
@@ -157,6 +157,29 @@ For example:
 llm -m openrouter/openai/gpt-5 \
    'prove dogs exist' \
    -o reasoning_effort high
+```
+
+You can also use `xhigh` for maximum reasoning effort:
+
+```bash
+llm -m openrouter/openai/gpt-5 \
+   'prove dogs exist' \
+   -o reasoning_effort xhigh
+```
+
+### Verbosity
+
+Claude 4.6 Opus and Sonnet support a `verbosity` parameter to control response detail level:
+
+- `-o verbosity low|medium|high|max` - control response thoroughness
+- `max` is only supported on Claude 4.6 Opus and Sonnet (falls back to `high` for other models)
+
+For example:
+
+```bash
+llm -m openrouter/anthropic/claude-4.6-opus \
+   'explain quantum computing' \
+   -o verbosity max
 ```
 
 ### Provider routing

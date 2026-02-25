@@ -34,9 +34,12 @@ def has_parameter(model_definition, parameter):
 
 
 class ReasoningEffortEnum(str, Enum):
+    none = "none"
+    minimal = "minimal"
     low = "low"
     medium = "medium"
     high = "high"
+    xhigh = "xhigh"
 
 
 class _mixin:
@@ -50,7 +53,7 @@ class _mixin:
             default=None,
         )
         reasoning_effort: Optional[ReasoningEffortEnum] = Field(
-            description='One of "high", "medium", or "low" to control reasoning effort',
+            description='One of "xhigh", "high", "medium", "low", "minimal", or "none" to control reasoning effort',
             default=None,
         )
         reasoning_max_tokens: Optional[int] = Field(
@@ -59,6 +62,10 @@ class _mixin:
         )
         reasoning_enabled: Optional[bool] = Field(
             description="Set to true to enable reasoning with default parameters",
+            default=None,
+        )
+        verbosity: Optional[str] = Field(
+            description="Controls response detail level (low, medium, high, max). 'max' is only supported on Claude 4.6 Opus and Sonnet.",
             default=None,
         )
 
@@ -81,6 +88,7 @@ class _mixin:
         kwargs.pop("reasoning_effort", None)
         kwargs.pop("reasoning_max_tokens", None)
         kwargs.pop("reasoning_enabled", None)
+        kwargs.pop("verbosity", None)
         extra_body = {}
         if prompt.options.online:
             extra_body["plugins"] = [{"id": "web"}]
@@ -95,6 +103,8 @@ class _mixin:
             reasoning["enabled"] = prompt.options.reasoning_enabled
         if reasoning:
             extra_body["reasoning"] = reasoning
+        if prompt.options.verbosity:
+            kwargs["verbosity"] = prompt.options.verbosity
         if extra_body:
             kwargs["extra_body"] = extra_body
         return kwargs
@@ -218,7 +228,9 @@ def register_commands(cli):
                             + ": "
                             + (value if isinstance(value, str) else json.dumps(value))
                         )
-                bits.append(f"  supports_schema: {has_parameter(model, 'structured_outputs')}")
+                bits.append(
+                    f"  supports_schema: {has_parameter(model, 'structured_outputs')}"
+                )
                 bits.append(f"  supports_tools: {has_parameter(model, 'tools')}")
                 pricing = format_pricing(model["pricing"])
                 if pricing:

@@ -143,3 +143,31 @@ def test_tool_calls():
             "model": "openai/gpt-4.1-mini",
         }
     )
+
+
+@pytest.mark.vcr
+def test_verbosity_option():
+    model = llm.get_model("openrouter/anthropic/claude-sonnet-4.6")
+    response = model.prompt("What is 2+2?", options=model.Options(verbosity="max"))
+    assert str(response) == snapshot("4")
+    response_dict = dict(response.response_json)
+    response_dict.pop("id")  # differs between requests
+    response_dict.pop("created")  # differs between requests
+    assert response_dict == snapshot(
+        {
+            "content": "4",
+            "role": "assistant",
+            "finish_reason": "stop",
+            "usage": {
+                "completion_tokens": 1,
+                "prompt_tokens": 13,
+                "total_tokens": 14,
+                "completion_tokens_details": {"reasoning_tokens": 0},
+                "prompt_tokens_details": {"cached_tokens": 0},
+                "cost": 0.000003,
+                "is_byok": False,
+            },
+            "object": "chat.completion.chunk",
+            "model": "anthropic/claude-sonnet-4.6",
+        }
+    )
